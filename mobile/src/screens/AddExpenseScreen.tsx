@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -14,8 +14,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { addExpenseNL, addExpenseManual } from "../api/expenses";
-import { COLORS, CATEGORY_ICONS, CATEGORY_COLORS ,CATEGORIES} from '../constants';
-
+import {
+  COLORS,
+  CATEGORY_ICONS,
+  CATEGORY_COLORS,
+  CATEGORIES,
+} from "../constants";
 
 type Tab = "smart" | "manual";
 
@@ -34,12 +38,17 @@ export default function AddExpenseScreen({ navigation }: any) {
   const [desc, setDesc] = useState("");
   const [manLoading, setManLoading] = useState(false);
 
+  useEffect(() => {
+    setPreview(null);
+  }, []);
+
   const handleSmartParse = async () => {
     if (!nlInput.trim()) return;
     setNlLoading(true);
     try {
       const expense = await addExpenseNL(nlInput.trim());
       setPreview(expense);
+      setNlInput("");
     } catch (e: any) {
       Alert.alert("Error", e.message);
     } finally {

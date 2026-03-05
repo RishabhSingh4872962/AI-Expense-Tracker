@@ -33,6 +33,8 @@ RULES:
    - Other (anything that doesn't fit above)
 4. Description should be a clean summary (not the raw input)
 5. Merchant is the company/store name if mentioned, null otherwise
+6. If you can recognize a category or merchant but NO amount is present,
+   still return the error below — do NOT guess or assume an amount.
 
 RESPOND ONLY WITH VALID JSON, no other text:
 {
@@ -43,13 +45,20 @@ RESPOND ONLY WITH VALID JSON, no other text:
   "merchant": "<string or null>"
 }
 
-If you cannot extract a valid amount, respond:
+If no amount is found (even if category/merchant is clear), respond:
 {
-  "error": "Could not parse expense. Please include an amount.",
+  "error": "No amount found. Please include an amount like '200 on coffee'.",
+  "amount": null
+}
+
+If the input is completely unparseable, respond:
+{
+  "error": "Could not understand input. Try something like 'spent 500 on lunch'.",
   "amount": null
 }`;
 
 export async function parseExpense(text: string): Promise<ParsedExpense> {
+  console.log("mkdmsksmkm")
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error("GROQ_API_KEY not set in environment");
 
@@ -88,6 +97,8 @@ export async function parseExpense(text: string): Promise<ParsedExpense> {
   } catch {
     throw new Error("AI returned invalid JSON");
   }
+
+  console.log(parsed)
 
   if (parsed.error || parsed.amount === null || parsed.amount === undefined) {
     throw new Error(
