@@ -10,6 +10,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -46,9 +47,14 @@ export default function AddExpenseScreen({ navigation }: any) {
     if (!nlInput.trim()) return;
     setNlLoading(true);
     try {
+      Keyboard.dismiss();
       const expense = await addExpenseNL(nlInput.trim());
       setPreview(expense);
       setNlInput("");
+
+      setTimeout(() => {
+        setPreview(null);
+      }, 3000);
     } catch (e: any) {
       Alert.alert("Error", e.message);
     } finally {
