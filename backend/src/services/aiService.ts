@@ -58,7 +58,6 @@ If the input is completely unparseable, respond:
 }`;
 
 export async function parseExpense(text: string): Promise<ParsedExpense> {
-  console.log("mkdmsksmkm")
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error("GROQ_API_KEY not set in environment");
 
@@ -98,7 +97,6 @@ export async function parseExpense(text: string): Promise<ParsedExpense> {
     throw new Error("AI returned invalid JSON");
   }
 
-  console.log(parsed)
 
   if (parsed.error || parsed.amount === null || parsed.amount === undefined) {
     throw new Error(
