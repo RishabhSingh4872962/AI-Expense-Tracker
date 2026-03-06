@@ -11,6 +11,7 @@ Time to build: **2.3 hours** (with AI assistance)
 ## 🎥 Demo
 
 [Link to your screen recording]
+https://www.loom.com/share/82cd316ebd3a4907a9afd15f58390185
 
 ---
 
@@ -152,3 +153,4 @@ Most helpful prompt:
 ## 📜 License
 
 MIT — Feel free to use this for your own projects.
+
