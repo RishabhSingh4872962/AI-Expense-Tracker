@@ -1,52 +1,162 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
+  Alert,
   ActivityIndicator,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { fetchExpenses } from "../api/expenses";
-import { Expense } from "../types";
-import { COLORS, CATEGORY_ICONS, CATEGORY_COLORS } from "../constants";
+import {
+  addExpenseNL,
+  fetchExpenses,
+  deleteExpense,
+} from "../api/expenses";
+
+
+import { COLORS, CATEGORY_ICONS, CATEGORY_COLORS,CATEGORY_EMOJI } from "../constants";
+
+
+import {Expense} from "../types/index"
+
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
-function relativeTime(dateStr: string): string {
-  // convert "YYYY-MM-DD HH:mm:ss" → "YYYY-MM-DDTHH:mm:ssZ"
-  const utcDate = new Date(dateStr.replace(" ", "T") + "Z");
 
-  console.log(dateStr, utcDate.getTime(), Date.now());
-
-  const diff = Date.now() - utcDate.getTime();
-
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (days > 0) return `${days} day${days > 1 ? "s" : ""} ago`;
-  if (hours > 0) return `${hours} hr${hours > 1 ? "s" : ""} ago`;
-  if (minutes > 0) return `${minutes} min${minutes > 1 ? "s" : ""} ago`;
-
+function relativeTime(raw: string): string {
+  // SQLite returns "YYYY-MM-DD HH:mm:ss" (UTC) — normalise to ISO
+  const ms = Date.now() - new Date(raw.replace(" ", "T") + "Z").getTime();
+  const m = Math.floor(ms / 60_000);
+  const h = Math.floor(ms / 3_600_000);
+  const d = Math.floor(ms / 86_400_000);
+  if (d > 0) return `${d} day${d > 1 ? "s" : ""} ago`;
+  if (h > 0) return `${h} hr${h > 1 ? "s" : ""} ago`;
+  if (m > 0) return `${m} min${m > 1 ? "s" : ""} ago`;
   return "Just now";
 }
 
-export default function HomeScreen({ navigation }: any) {
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+// ── sub-components ────────────────────────────────────────────────────────────
 
-  const load = useCallback(async () => {
+interface SuccessCardProps {
+  expense: Expense;
+}
+function SuccessCard({ expense: e }: SuccessCardProps) {
+  return (
+    <View style={s.successCard}>
+      <Text style={s.successTitle}>✅ Added Successfully!</Text>
+      <View style={s.successRow}>
+        <Text style={s.successLabel}>Amount</Text>
+        <Text style={s.successValue}>{fmt(e.amount)}</Text>
+      </View>
+      <View style={s.successRow}>
+        <Text style={s.successLabel}>Category</Text>
+        <Text style={s.successValue}>
+          {CATEGORY_EMOJI[e.category] ?? "📦"} {e.category}
+        </Text>
+      </View>
+      <View style={s.successRow}>
+        <Text style={s.successLabel}>Description</Text>
+        <Text style={s.successValue}>{e.description}</Text>
+      </View>
+      {e.merchant && (
+        <View style={s.successRow}>
+          <Text style={s.successLabel}>Merchant</Text>
+          <Text style={s.successValue}>{e.merchant}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+interface ExpenseItemProps {
+  expense: Expense;
+  onDelete: (id: number) => void;
+  deleting: boolean;
+}
+function ExpenseItem({ expense: e, onDelete, deleting }: ExpenseItemProps) {
+  const emoji = CATEGORY_EMOJI[e.category] ?? "📦";
+  const color = CATEGORY_COLORS[e.category] ?? "#95A5A6";
+
+  const confirmDelete = () =>
+    Alert.alert(
+      "Delete expense?",
+      `${emoji} ${e.description} — ${fmt(e.amount)}`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => onDelete(e.id) },
+      ],
+    );
+
+  return (
+    <View style={s.item}>
+      {/* Left icon */}
+      <View style={[s.itemIcon, { backgroundColor: color + "22" }]}>
+        <Text style={{ fontSize: 18 }}>{emoji}</Text>
+      </View>
+
+      {/* Middle info */}
+      <View style={s.itemInfo}>
+        <Text style={s.itemCategory}>{e.category}</Text>
+        <Text style={s.itemDesc} numberOfLines={1}>
+          {e.description}
+        </Text>
+        <Text style={s.itemTime}>{relativeTime(e.created_at)}</Text>
+      </View>
+
+      {/* Right: amount + delete */}
+      <View style={s.itemRight}>
+        <Text style={s.itemAmt}>{fmt(e.amount)}</Text>
+        {deleting ? (
+          <ActivityIndicator
+            size="small"
+            color={COLORS.danger}
+            style={{ marginTop: 6 }}
+          />
+        ) : (
+          <TouchableOpacity
+            onPress={confirmDelete}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons
+              name="trash-outline"
+              size={18}
+              color={COLORS.danger}
+              style={{ marginTop: 6 }}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+}
+
+// ── main screen ───────────────────────────────────────────────────────────────
+
+export default function AddScreen() {
+  const [input, setInput] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [lastAdded, setLastAdded] = useState<Expense | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set());
+  const successTimer = useRef<ReturnType<typeof setTimeout>>(null);
+
+  // ── data loading ────────────────────────────────────────────────────────────
+
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
     try {
       setExpenses(await fetchExpenses());
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "Failed to load expenses.");
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
   }, []);
@@ -57,197 +167,249 @@ export default function HomeScreen({ navigation }: any) {
     }, [load]),
   );
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
-  const monthStr = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-    .toISOString()
-    .slice(0, 10);
+  // ── add expense ─────────────────────────────────────────────────────────────
 
-  const sum = (list: Expense[]) => list.reduce((a, e) => a + e.amount, 0);
-  const todayAmt = sum(
-    expenses.filter((e) => e.created_at.startsWith(todayStr)),
-  );
-  const weekAmt = sum(expenses.filter((e) => e.created_at >= weekAgo));
-  const monthAmt = sum(expenses.filter((e) => e.created_at >= monthStr));
+  const handleAdd = async () => {
+    const text = input.trim();
+    if (!text) return;
 
-  const hour = new Date().getHours();
-  const greet = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : "Evening";
+    setSubmitting(true);
+    try {
+      const expense = await addExpenseNL(text);
+      setInput("");
+      setExpenses((prev) => [expense, ...prev]);
 
-  if (loading)
-    return (
-      <View style={s.center}>
-        <ActivityIndicator color={COLORS.primary} size="large" />
-      </View>
-    );
+      // Show success card for 3 s
+      setLastAdded(expense);
+      successTimer?.current && clearTimeout(successTimer?.current);
+      successTimer.current = setTimeout(() => setLastAdded(null), 3000);
+    } catch (e: any) {
+      Alert.alert(
+        "Could not add expense",
+        e?.message ?? "Something went wrong.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ── delete expense ──────────────────────────────────────────────────────────
+
+  const handleDelete = async (id: number) => {
+    // Optimistic: remove immediately
+    setExpenses((prev) => prev.filter((e) => e.id !== id));
+    setDeletingIds((prev) => new Set(prev).add(id));
+
+    try {
+      await deleteExpense(id);
+    } catch (e: any) {
+      // Restore on failure
+      Alert.alert("Delete failed", e?.message ?? "Could not delete expense.");
+      load(); // refetch to restore correct state
+    } finally {
+      setDeletingIds((prev) => {
+        const n = new Set(prev);
+        n.delete(id);
+        return n;
+      });
+    }
+  };
+
+  // ── render ──────────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={s.safe}>
-      <ScrollView
-        contentContainerStyle={s.scroll}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              load();
-            }}
-          />
-        }
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Header */}
-        <View style={s.header}>
-          <View>
-            <Text style={s.greet}>Good {greet} 👋</Text>
-            <Text style={s.date}>
-              {new Date().toLocaleDateString("en-IN", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              })}
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={s.addBtn}
-            onPress={() => navigation.navigate("Add")}
-          >
-            <Ionicons name="add" size={22} color="#fff" />
-          </TouchableOpacity>
-        </View>
+        <FlatList
+          data={expenses}
+          keyExtractor={(e) => String(e.id)}
+          contentContainerStyle={s.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => load(true)}
+              tintColor={COLORS.primary}
+            />
+          }
+          ListHeaderComponent={
+            <View>
+              {/* ── Header ── */}
+              <View style={s.header}>
+                <Text style={s.title}>AI Expense Tracker</Text>
+                <Text style={s.subtitle}>Add expenses in plain English</Text>
+              </View>
 
-        {/* Summary Cards */}
-        <View style={s.cards}>
-          {[
-            { label: "Today", amount: todayAmt, color: COLORS.primary },
-            { label: "This Week", amount: weekAmt, color: COLORS.success },
-            { label: "This Month", amount: monthAmt, color: COLORS.warning },
-          ].map((c) => (
-            <View key={c.label} style={[s.card, { borderTopColor: c.color }]}>
-              <Text style={[s.cardAmt, { color: c.color }]}>
-                {fmt(c.amount)}
-              </Text>
-              <Text style={s.cardLabel}>{c.label}</Text>
+              {/* ── Input section ── */}
+              <View style={s.inputCard}>
+                <TextInput
+                  style={s.textInput}
+                  placeholder="e.g., Spent 500 on groceries at BigBazaar"
+                  placeholderTextColor={COLORS.muted}
+                  value={input}
+                  onChangeText={setInput}
+                  onSubmitEditing={handleAdd}
+                  returnKeyType="done"
+                  editable={!submitting}
+                  multiline={false}
+                />
+                <TouchableOpacity
+                  style={[
+                    s.addBtn,
+                    (!input.trim() || submitting) && s.addBtnDisabled,
+                  ]}
+                  onPress={handleAdd}
+                  disabled={!input.trim() || submitting}
+                >
+                  {submitting ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Ionicons name="add" size={22} color="#fff" />
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* ── Success card ── */}
+              {lastAdded && <SuccessCard expense={lastAdded} />}
+
+              {/* ── List header ── */}
+              <Text style={s.sectionTitle}>Recent Expenses</Text>
             </View>
-          ))}
-        </View>
-
-        {/* Recent */}
-        <View style={s.section}>
-          <View style={s.row}>
-            <Text style={s.sectionTitle}>Recent</Text>
-            <TouchableOpacity onPress={() => navigation.navigate("List")}>
-              <Text style={{ color: COLORS.primary, fontSize: 13 }}>
-                See all
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {expenses.length === 0 ? (
-            <Text style={s.empty}>No expenses yet. Tap + to add one!</Text>
-          ) : (
-            expenses
-              .slice(0, 6)
-              .map((e) => <ExpenseRow key={e.id} expense={e} />)
+          }
+          ListEmptyComponent={
+            <View style={s.empty}>
+              <Text style={s.emptyEmoji}>🧾</Text>
+              <Text style={s.emptyText}>No expenses yet.</Text>
+              <Text style={s.emptyHint}>Add your first one above!</Text>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <ExpenseItem
+              expense={item}
+              onDelete={handleDelete}
+              deleting={deletingIds.has(item.id)}
+            />
           )}
-        </View>
-      </ScrollView>
+          ItemSeparatorComponent={() => <View style={s.separator} />}
+        />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-function ExpenseRow({ expense: e }: { expense: Expense }) {
-  const icon = (CATEGORY_ICONS[e.category] ?? "ellipsis-horizontal") as any;
-  const color = CATEGORY_COLORS[e.category] ?? "#95A5A6";
-
-  console.log(e.created_at);
-  return (
-    <View style={s.eRow}>
-      <View style={[s.eIcon, { backgroundColor: color + "20" }]}>
-        <Ionicons name={icon} size={18} color={color} />
-      </View>
-      <View style={s.eInfo}>
-        <Text style={s.eMerchant}>{e.merchant || e.description}</Text>
-        <View style={s.eSubInfo}>
-          <Text style={s.eCat}>{e.category}</Text>
-          <Text style={s.eCat}>{relativeTime(e.created_at)}</Text>
-        </View>
-      </View>
-      <Text style={s.eAmt}>{fmt(e.amount)}</Text>
-    </View>
-  );
-}
+// ── styles ────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
-  scroll: { padding: 16, paddingBottom: 32 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: {
+  list: { padding: 16, paddingBottom: 40 },
+
+  // header
+  header: { marginBottom: 20 },
+  title: { fontSize: 24, fontWeight: "800", color: COLORS.text },
+  subtitle: { fontSize: 14, color: COLORS.muted, marginTop: 4 },
+
+  // input
+  inputCard: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    padding: 10,
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  greet: { fontSize: 20, fontWeight: "700", color: COLORS.text },
-  date: { fontSize: 13, color: COLORS.muted, marginTop: 2 },
+  textInput: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.text,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
   addBtn: {
     backgroundColor: COLORS.primary,
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
-  cards: { flexDirection: "row", gap: 10, marginBottom: 24 },
-  card: {
-    flex: 1,
-    backgroundColor: COLORS.card,
+  addBtnDisabled: { opacity: 0.45 },
+
+  // success card
+  successCard: {
+    backgroundColor: "#EAFAF1",
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.success,
     borderRadius: 12,
-    padding: 12,
-    borderTopWidth: 3,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
+    padding: 14,
+    marginBottom: 14,
   },
-  cardAmt: { fontSize: 15, fontWeight: "700" },
-  cardLabel: { fontSize: 11, color: COLORS.muted, marginTop: 4 },
-  section: {
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 16,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
+  successTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1E8449",
+    marginBottom: 8,
   },
-  row: {
+  successRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 4,
   },
-  sectionTitle: { fontSize: 16, fontWeight: "600", color: COLORS.text },
-  empty: { color: COLORS.muted, textAlign: "center", paddingVertical: 20 },
-  eRow: {
+  successLabel: { fontSize: 13, color: COLORS.muted },
+  successValue: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.text,
+    flexShrink: 1,
+    textAlign: "right",
+    marginLeft: 8,
+  },
+
+  // section
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.text,
+    marginBottom: 10,
+  },
+
+  // expense item
+  item: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    padding: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  eIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+  itemIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
-  eInfo: { flex: 1 },
-  eSubInfo: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 2,
-  },
-  eMerchant: { fontSize: 14, fontWeight: "600", color: COLORS.text },
-  eCat: { fontSize: 12, color: COLORS.muted },
-  eAmt: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  itemInfo: { flex: 1 },
+  itemCategory: { fontSize: 13, fontWeight: "700", color: COLORS.text },
+  itemDesc: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
+  itemTime: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
+  itemRight: { alignItems: "flex-end", minWidth: 64 },
+  itemAmt: { fontSize: 15, fontWeight: "800", color: COLORS.text },
+
+  separator: { height: 10 },
+
+  // empty state
+  empty: { alignItems: "center", paddingVertical: 60 },
+  emptyEmoji: { fontSize: 48, marginBottom: 12 },
+  emptyText: { fontSize: 16, fontWeight: "600", color: COLORS.text },
+  emptyHint: { fontSize: 13, color: COLORS.muted, marginTop: 4 },
 });
