@@ -1,1 +1,1 @@
-export const API_BASE_URL = 'http://192.168.1.7:4000'; // ← change this
+export const API_BASE_URL = 'https://ai-expense-tracker-jifb.onrender.com'; // ← change this

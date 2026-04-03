@@ -33,15 +33,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   "Other": "#95A5A6",
 };
 
-export const CATEGORY_ICONS: Record<string, string> = {
-  "Food & Dining": "restaurant",
-  Transport: "car",
-  Shopping: "bag",
-  Entertainment: "film",
-  Health: "medkit",
-  "Bills & Utilities": "receipt",
-  Other: "ellipsis-horizontal",
-};
+
 export const CATEGORY_EMOJI: Record<string, string> = {
   "Food & Dining": "🍔",
   Transport: "🚗",

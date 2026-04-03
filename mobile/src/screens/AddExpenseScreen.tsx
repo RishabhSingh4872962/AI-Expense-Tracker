@@ -17,7 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { addExpenseNL, addExpenseManual } from "../api/expenses";
 import {
   COLORS,
-  CATEGORY_ICONS,
+  
   CATEGORY_COLORS,
   CATEGORIES,
 } from "../constants";

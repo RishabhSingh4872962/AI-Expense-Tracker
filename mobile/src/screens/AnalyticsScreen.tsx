@@ -12,7 +12,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { PieChart, BarChart } from "react-native-chart-kit";
 import { fetchExpenses } from "../api/expenses";
 import { Expense } from "../types";
-import  { COLORS, CATEGORY_ICONS, CATEGORY_COLORS } from '../constants';
+import  { COLORS,  CATEGORY_COLORS } from '../constants';
 
 const W = Dimensions.get("window").width - 32;
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;

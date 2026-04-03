@@ -16,7 +16,7 @@ import { fetchExpenses, deleteExpense } from "../api/expenses";
 import { Expense } from "../types";
 import {
   COLORS,
-  CATEGORY_ICONS,
+  
   CATEGORY_COLORS,
   CATEGORIES,
   CATEGORY_EMOJI,
@@ -131,8 +131,7 @@ export default function ExpenseListScreen() {
           contentContainerStyle={s.list}
           ListEmptyComponent={<Text style={s.empty}>No expenses found.</Text>}
           renderItem={({ item: e }) => {
-            const icon = (CATEGORY_ICONS[e.category] ??
-              "ellipsis-horizontal") as any;
+           
             const emoji = CATEGORY_EMOJI[e.category] ?? "📦";
 
             const color = CATEGORY_COLORS[e.category] ?? "#95A5A6";

@@ -22,7 +22,7 @@ import {
 } from "../api/expenses";
 
 
-import { COLORS, CATEGORY_ICONS, CATEGORY_COLORS,CATEGORY_EMOJI } from "../constants";
+import { COLORS,  CATEGORY_COLORS,CATEGORY_EMOJI } from "../constants";
 
 
 import {Expense} from "../types/index"
